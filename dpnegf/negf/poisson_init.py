@@ -284,7 +284,7 @@ class Interface3D(object):
     internal_NP : int
         Number of internal (non-boundary) grid points.
     """
-    def __init__(self,grid,Dirichlet_group,dielectric_group):
+    def __init__(self,grid,Dirichlet_group,dielectric_group,eps_average_mode:str='harmonic'):
         """
         Initializes the Poisson solver with the given grid, Dirichlet boundary regions, and dielectric regions.
         Parameters:
@@ -330,7 +330,7 @@ class Interface3D(object):
         self.get_boundary_points()
 
         self.lead_gate_potential = np.zeros(grid.Np) # no lead or gate potential initially, all grid points are set to zero
-        
+        self.average_mode = eps_average_mode
         
 
     def get_fixed_charge(self,x_range,y_range,z_range,molar_fraction,atom_gridpoint_index):
@@ -639,31 +639,36 @@ class Interface3D(object):
         - The method modifies J and B in place.
         """
         # construct the Jacobian and B for the Poisson equation
-               
+        def average_eps(eps1, eps2, mode:str='harmonic'):
+            if mode == 'arithmetic':
+                return 0.5 * (eps1 + eps2)
+            elif mode == 'harmonic':
+                return 2.0 * eps1 * eps2 / (eps1 + eps2)
+        average_mode = self.average_mode
         Nx = self.grid.shape[0];Ny = self.grid.shape[1];Nz = self.grid.shape[2]
         for gp_index in range(self.grid.Np):
             if self.boudnary_points[gp_index] == "in":
-                flux_xm_J = self.grid.surface_grid[gp_index,0]*eps0*(self.eps[gp_index-1]+self.eps[gp_index])*0.5\
+                flux_xm_J = self.grid.surface_grid[gp_index,0]*eps0*average_eps(self.eps[gp_index-1],self.eps[gp_index],mode = average_mode)\
                 /abs(self.grid.grid_coord[gp_index,0]-self.grid.grid_coord[gp_index-1,0])
                 flux_xm_B = flux_xm_J*(self.phi[gp_index-1]-self.phi[gp_index])
 
-                flux_xp_J = self.grid.surface_grid[gp_index,0]*eps0*(self.eps[gp_index+1]+self.eps[gp_index])*0.5\
+                flux_xp_J = self.grid.surface_grid[gp_index,0]*eps0*average_eps(self.eps[gp_index+1],self.eps[gp_index],mode = average_mode)\
                 /abs(self.grid.grid_coord[gp_index+1,0]-self.grid.grid_coord[gp_index,0])
                 flux_xp_B = flux_xp_J*(self.phi[gp_index+1]-self.phi[gp_index])
                 
-                flux_ym_J = self.grid.surface_grid[gp_index,1]*eps0*(self.eps[gp_index-Nx]+self.eps[gp_index])*0.5\
+                flux_ym_J = self.grid.surface_grid[gp_index,1]*eps0*average_eps(self.eps[gp_index-Nx],self.eps[gp_index],mode = average_mode)\
                 /abs(self.grid.grid_coord[gp_index-Nx,1]-self.grid.grid_coord[gp_index,1])
                 flux_ym_B = flux_ym_J*(self.phi[gp_index-Nx]-self.phi[gp_index])
 
-                flux_yp_J = self.grid.surface_grid[gp_index,1]*eps0*(self.eps[gp_index+Nx]+self.eps[gp_index])*0.5\
+                flux_yp_J = self.grid.surface_grid[gp_index,1]*eps0*average_eps(self.eps[gp_index+Nx],self.eps[gp_index],mode = average_mode)\
                 /abs(self.grid.grid_coord[gp_index+Nx,1]-self.grid.grid_coord[gp_index,1])
                 flux_yp_B = flux_yp_J*(self.phi[gp_index+Nx]-self.phi[gp_index])
 
-                flux_zm_J = self.grid.surface_grid[gp_index,2]*eps0*(self.eps[gp_index-Nx*Ny]+self.eps[gp_index])*0.5\
+                flux_zm_J = self.grid.surface_grid[gp_index,2]*eps0*average_eps(self.eps[gp_index-Nx*Ny],self.eps[gp_index],mode = average_mode)\
                 /abs(self.grid.grid_coord[gp_index-Nx*Ny,2]-self.grid.grid_coord[gp_index,2])
                 flux_zm_B = flux_zm_J*(self.phi[gp_index-Nx*Ny]-self.phi[gp_index])
 
-                flux_zp_J = self.grid.surface_grid[gp_index,2]*eps0*(self.eps[gp_index+Nx*Ny]+self.eps[gp_index])*0.5\
+                flux_zp_J = self.grid.surface_grid[gp_index,2]*eps0*average_eps(self.eps[gp_index+Nx*Ny],self.eps[gp_index],mode = average_mode)\
                 /abs(self.grid.grid_coord[gp_index+Nx*Ny,2]-self.grid.grid_coord[gp_index,2])
                 flux_zp_B = flux_zp_J*(self.phi[gp_index+Nx*Ny]-self.phi[gp_index])
 
@@ -709,6 +714,4 @@ class Interface3D(object):
                     B[gp_index] = (self.phi[gp_index]-self.lead_gate_potential[gp_index])
 
             if B[gp_index]!=0: # for convenience change the sign of B in later NR iteration
-                B[gp_index] = -B[gp_index]
-        
-        
+                B[gp_index] = -B[gp_index]           
